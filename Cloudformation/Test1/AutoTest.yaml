@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Autoscaling group test
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: ''
+
+  AutoScalingGroupName:
+    Type: String
+    Default: ''
+
+  KeyName:
+    Type: String
+    Default: test.yarema
+
+  DesiredCapacity:
+    Type: String
+    Default: '2'
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+
+  VPCCidr:
+    Type: String
+    Default: '10.10.0.0/16'
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues: [t2.micro, t2.small, t2.medium, t2.large]
+    ConstraintDescription: please choose a valid instance type
+
+#  ImageId:
+#    Type: String
+#    Default: 'ami-10e6c8fb'
+
+  MaxSize:
+    Type: String
+    Default: '3'
+
+  MinSize:
+    Type: String
+    Default: '2'
+
+Mappings:
+  AWSRegionToAMI:
+    us-east-1:
+      AMIID: ami-eca289fb
+    us-east-2:
+      AMIID: ami-446f3521
+    us-west-1:
+      AMIID: ami-9fadf8ff
+    us-west-2:
+      AMIID: ami-7abc111a
+    eu-west-1:
+      AMIID: ami-a1491ad2
+    eu-central-1:
+      AMIID: ami-10e6c8fb
+    ap-northeast-1:
+      AMIID: ami-9cd57ffd
+    ap-southeast-1:
+      AMIID: ami-a900a3ca
+    ap-southeast-2:
+      AMIID: ami-5781be34
+
+Resources:
+
+  Autoscaling:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      AutoScalingGroupName: !Sub '${AWS::StackName}-ASG'
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref DesiredCapacity
+      LaunchConfigurationName: !Ref LaunchConf
+      HealthCheckGracePeriod: 60
+      HealthCheckType: ELB
+      VPCZoneIdentifier: !Ref Subnets
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: 'true'
+
+  LaunchConf:
+    Type: "AWS::AutoScaling::LaunchConfiguration"
+    Properties:
+      ImageId: !FindInMap [AWSRegionToAMI, !Ref 'AWS::Region', AMIID]
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      KeyName: !Ref 'KeyName'
+      SecurityGroups: [!Ref EcsSecurityGroup]
+#      UserData:
+#        Fn::Base64: !Sub |
+#          #!/bin/bash -xe
+#          echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+#          yum install -y aws-cfn-bootstrap
+#          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource ECSAutoScalingGroup --region ${AWS::Region}
+    DependsOn: EcsSecurityGroup
+
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS Security Group
+      VpcId: !Ref VpcId
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ec2.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ['ecs:CreateCluster', 'ecs:DeregisterContainerInstance', 'ecs:DiscoverPollEndpoint',
+              'ecs:Poll', 'ecs:RegisterContainerInstance', 'ecs:StartTelemetrySession',
+              'ecs:Submit*', 'logs:CreateLogStream', 'logs:PutLogEvents']
+            Resource: '*'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'EC2Role']

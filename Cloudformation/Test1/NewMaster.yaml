@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  MasterStackName:
+    Type: String
+    Default: ''
+
+
+Resources:
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'https://s3.eu-central-1.amazonaws.com/test-yarema/VPC.yaml'
+      TimeoutInMinutes: '20'
+      Parameters:
+        MasterStackName:   !Ref AWS::StackName
+        VPCCidr:           '10.10.0.0/16'
+        PublicSubnet1CIDR: '10.10.1.0/24'
+        PublicSubnet2CIDR: '10.10.2.0/24'
+
+  Autoscaling:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'https://s3.eu-central-1.amazonaws.com/test-yarema/AutoTest.yaml'
+      TimeoutInMinutes: '20'
+      Parameters:
+        AutoScalingGroupName: !Ref AWS::StackName
+        Subnets:              !GetAtt VPC.Outputs.PublicSubnets
+        VpcId:                !GetAtt VPC.Outputs.VPC
+
+  ECS:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'https://s3.eu-central-1.amazonaws.com/test-yarema/ECS.yaml'
+      TimeoutInMinutes: '30'
+      Parameters:
+        MasterStackName:   !Ref AWS::StackName
+        Subnets:           !GetAtt VPC.Outputs.PublicSubnets
+#        ClusterName:       !Ref AWS::StackName
+        VpcId:             !GetAtt VPC.Outputs.VPC
+    DependsOn: VPC

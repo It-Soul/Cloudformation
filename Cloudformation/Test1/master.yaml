@@ -1,0 +1,90 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: ''
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues: [t2.micro, t2.small, t2.medium, t2.large]
+    ConstraintDescription: please choose a valid instance type
+
+  ImageId:
+    Type: String
+    Default: ami-c7e0c82c
+
+  SecurityGroup:
+    Type: String
+    Default: sg-685c2d03
+
+  Cooldown:
+    Type: String
+    Default: '2'
+
+  HealthCheckGracePeriod:
+    Type: String
+    Default: 60
+
+  HealthCheckType:
+    Type: String
+    Default: EC2
+
+  MaxSize:
+    Type: String
+    Default: 2
+
+  MinSize:
+    Type: String
+    Default: 2
+
+  MasterStackName:
+    Description: Master Stack Name
+    Type: String
+    Default: TEST
+
+  TemplateBucket:
+    Description: Bucket name
+    Type: String
+    Default: 'https://s3.eu-central-1.amazonaws.com/test-yarema'
+
+  AutoScalingGroupName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    Default: 'test'
+
+  VPCCidrID:
+    Description: Choose which VPC this ECS cluster should be deployed to
+    Type: String
+    Default: '10.10.0.0/16'
+
+Resources:
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'https://s3.eu-central-1.amazonaws.com/test-yarema/VPC.yaml'
+      TimeoutInMinutes: 10
+      Parameters:
+        MasterStackName: !Ref MasterStackName
+        VPCCidr: !Ref VPCCidrID
+        PublicSubnet1CIDR: '10.10.1.0/24'
+        PublicSubnet2CIDR: '10.10.2.0/24'
+
+  Autoscaling:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'https://s3.eu-central-1.amazonaws.com/test-yarema/AutoTest.yaml'
+      TimeoutInMinutes: '5'
+      Parameters:
+        AutoScalingGroupName: !Ref AutoScalingGroupName
+        Cooldown: !Ref Cooldown
+        VPCZoneIdentifier: !GetAtt VPC.Outputs.VPC
+        Subnets: !GetAtt VPC.Outputs.PublicSubnets
+        HealthCheckGracePeriod: !Ref HealthCheckGracePeriod
+        HealthCheckType: !Ref HealthCheckType
+        MaxSize: !Ref MaxSize
+        MinSize: !Ref MinSize
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+    DependsOn:
+      - VPC
+

@@ -1,0 +1,182 @@
+Description: >
+    This is an example of a long running ECS service that serves a JSON API of products.
+Parameters:
+
+  VPC:
+    Description: The VPC that the ECS cluster is deployed to
+    Type: AWS::EC2::VPC::Id
+
+  Cluster:
+    Description: Please provide the ECS Cluster ID that this service should run on
+    Type: String
+
+  DesiredCount:
+    Description: How many instances of this task should we run across our cluster?
+    Type: Number
+    Default: 1
+
+  MaxCount:
+    Type: Number
+    Default: 2
+  Listener:
+    Description: The Application Load Balancer listener to register with
+    Type: String
+
+  Path:
+    Description: The path to register with the Application Load Balancer
+    Type: String
+    Default: /
+
+Resources:
+
+  InstanceService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      ServiceName: Container
+      Cluster: !Ref Cluster
+      DesiredCount: !Ref DesiredCount
+      LoadBalancers:
+        - ContainerName: Container
+          TargetGroupArn: !Ref TargetGroup
+          ContainerPort: 8000
+      Role: !Ref InstanceServiceRole
+      TaskDefinition: !Ref MyTaskDefinition
+
+  MyTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Family: Container
+      ContainerDefinitions:
+        - Name: Container
+          Image: nginx
+          Hostname: nginx
+          Cpu: 512
+          Memory: 512
+          Essential: true
+          PortMappings:
+            - HostPort: 0
+              ContainerPort: 5000
+#          LogConfiguration:
+#            LogDriver: awslogs
+#            Options:
+#              awslogs-group: !Ref CloudWatchLogGroup
+#              awslogs-region: !Ref 'AWS::Region'
+#              awslogs-stream-prefix: django
+#          MountPoints:
+#            - SourceVolume: nginx
+#              ContainerPath: /opt/
+#      Volumes:
+#        - Name: nginx
+#          Host:
+#            SourcePath: /home/ec2-user/
+
+#  InstanceService:
+#    Type: AWS::ECS::Service
+#    Properties:
+#      ServiceName: InstanceService
+#      Cluster: !Ref Cluster
+#      Role: !Ref InstanceServiceRole
+#      DesiredCount: !Ref DesiredCount
+#      TaskDefinition: !Ref TaskDefinitionInstance
+#      LoadBalancers:
+#        - ContainerName: 'nginx'
+#          ContainerPort: 8000
+#          TargetGroupArn: !Ref TargetGroup
+#
+#  TaskDefinitionInstance:
+#    Type: AWS::ECS::TaskDefinition
+#    Properties:
+#      ContainerDefinitions:
+#        - Name: 'nginx'
+#          Essential: true
+#          Image: nginx
+#          Hostname: nginx
+#          Cpu: 256
+#          Memory: 128
+#          PortMappings:
+#            - HostPort: 0
+#              ContainerPort: 8000
+
+  InstanceServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub instance-ecs-service-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: !Sub instance-ecs-service-${AWS::StackName}
+          PolicyDocument:
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - '*.*'
+#                  - 'ec2:AuthorizeSecurityGroupIngress'
+#                  - 'ec2:Describe*'
+#                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+#                  - 'elasticloadbalancing:Describe*'
+#                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+#                  - 'elasticloadbalancing:DeregisterTargets'
+#                  - 'elasticloadbalancing:DescribeTargetGroups'
+#                  - 'elasticloadbalancing:DescribeTargetHealth'
+#                  - 'elasticloadbalancing:RegisterTargets'
+#                  - "ecs:CreateCluster"
+#                  - "ecs:DeregisterContainerInstance"
+#                  - "ecs:DiscoverPollEndpoint"
+#                  - "ecs:Poll"
+#                  - "ecs:RegisterContainerInstance"
+#                  - "ecs:ListContainerInstances"
+#                  - "ecs:StartTelemetrySession"
+#                  - "ecs:Submit*"
+#                  - "ecr:GetAuthorizationToken"
+#                  - "ecr:BatchCheckLayerAvailability"
+#                  - "ecr:GetDownloadUrlForLayer"
+#                  - "ecr:BatchGetImage"
+#                  - "logs:CreateLogStream"
+#                  - "logs:PutLogEvents"- 'application-autoscaling:*'
+#                  - 'cloudwatch:DescribeAlarms'
+#                  - 'cloudwatch:PutMetricAlarm'
+#                  - 'ecs:DescribeServices'
+#                  - 'ecs:UpdateService'
+                Resource: '*'
+
+  InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - !Ref InstanceServiceRole
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ElasticLoadBalancing
+      VpcId: !Ref VPC
+      Port: '80'
+      Protocol: HTTP
+#      Matcher:
+#          HttpCode: 200-299
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref Listener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - !Ref Path
+      ListenerArn: !Ref Listener
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
