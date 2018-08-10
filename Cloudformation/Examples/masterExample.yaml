@@ -1,0 +1,37 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: ''
+
+Parameters:
+  TemplateBucket:
+    Type: String
+    Default: ''
+
+Metadata:
+  AWS::CloudFormation::Interface:
+      - Label:
+          default: Stack Configuration
+        Parameters:
+          - TemplateBucket
+
+Resources:
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:              !Sub "https://s3.amazonaws.com/${TemplateBucket}/vpc-network/vpc-network.yaml"
+      TimeoutInMinutes:         10
+      Parameters:
+        MasterStackName:        !Ref AWS::StackName
+        VPCCidr:                172.16.0.0/16
+        PublicSubnetACidr:      172.16.10.0/24
+        PublicSubnetBCidr:      172.16.11.0/24
+
+  ECS:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:              !Sub "https://s3.amazonaws.com/${TemplateBucket}/ecs-cluster/ecs-cluster.yaml"
+      TimeoutInMinutes:         10
+      Parameters:
+        MasterStack:            !Ref    AWS::StackName
+        VpcId:                  !GetAtt VPC.Outputs.VPCID
+        Subnets:                !GetAtt VPC.Outputs.PublicSubnets
