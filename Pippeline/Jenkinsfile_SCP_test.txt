@@ -1,0 +1,56 @@
+#!/usr/bin/env groovy
+import groovy.util.*
+
+node('master') {
+    
+    deleteDir()
+
+    properties(
+        [parameters ([
+            choice(choices: '4.5.15\n4.5.14', description: 'Choose version', name: 'tag',),
+        ])
+    ])
+    
+    
+    stage('Prepair_Artifacts') {
+        sh 'cd ${JENKINS_HOME}/jobs/DMC_build_pipeline/workspace/PackageDist/RPMPackage'
+        sh 'rm -rf ${JENKINS_HOME}/jobs/DMC_build_pipeline/workspace/PackageDist/RPMPackage/target/*.tar'
+        sh 'rm -rf "find ${JENKINS_HOME}/jobs/DMC_build_pipeline/workspace/PackageDist/RPMPackage -name ".svn" -type d"'
+        sh 'tar -cvf SCPdmcdoc-${tag}.tar ${JENKINS_HOME}/jobs/DMC_build_pipeline/workspace/PackageDist/RPMPackage/*'
+        sh 'gzip ${WORKSPACE}/SCPdmcdoc-${tag}.tar'
+        sh 'rm -rf ${WORKSPACE}/PackageDist/RPMPackage/target/*.tar'
+    }
+
+    stage ('PublishArtifacts')
+    {
+        sshPublisher(publishers: [sshPublisherDesc(configName: 'FTP', transfers: 
+        [
+            sshTransfer
+            (
+                excludes: '', execCommand: '', execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+',             
+                remoteDirectory: '/data/isc/sw/sicap_sw/dmc/DMC4.5/TEST', remoteDirectorySDF: false, removePrefix: '', 
+                sourceFiles: '${WORKSPACE}/SCPdmcdoc-${tag}.tar.gz'
+            ),  
+
+            sshTransfer
+            (
+                excludes: '', execCommand: '', execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+',             
+                remoteDirectory: '/data/isc/sw/sicap_sw/dmc/DMC4.5/TEST', remoteDirectorySDF: false, removePrefix: '', 
+                sourceFiles: '${JENKINS_HOME}/jobs/DMC_build_pipeline/workspace/PackageDist/RPMPackage/target/sicap-dmc-dist-rpmpkg-${tag}-SNAPSHOT-RPMPackage/SCPdmc-${tag}-SNAPSHOT/*.log'
+            ), 
+        
+            sshTransfer
+            (
+                excludes: '', execCommand: '', execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', 
+                remoteDirectory: '/data/isc/sw/sicap_sw/dmc/DMC4.5/TEST', remoteDirectorySDF: false, removePrefix: '', 
+                sourceFiles: '${JENKINS_HOME}/jobs/DMC_build_pipeline/workspace/PackageDist/SunPackage/target/sicap-dmc-dist-sunpkg-${tag}-SNAPSHOT-SunPackage/SCPdmc-${tag}-SNAPSHOT/relnotes/Ch*.txt'
+            ),
+
+            sshTransfer
+            (
+                excludes: '', execCommand: '', execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', 
+                remoteDirectory: '/data/isc/sw/sicap_sw/dmc/DMC4.5/TEST', remoteDirectorySDF: false, removePrefix: '', 
+                sourceFiles: '${JENKINS_HOME}jobs/DMC_build_pipeline/workspace/PackageDist/SunPackage/target/*.tar.gz')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)
+        ])
+    }
+}

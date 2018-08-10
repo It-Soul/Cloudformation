@@ -1,0 +1,95 @@
+#!/usr/bin/env groovy
+
+import java.util.*
+import hudson.tasks.test.*
+import hudson.model.*
+import groovy.json.*
+import groovy.json.JsonOutput
+
+
+node('master') {
+
+    
+    properties(
+        [parameters ([
+            choice(choices: 'true\nfalse', description: 'Skip tests?', name: 'TestStatus',),
+            choice(choices: '3.0\n3.1\n2.2', description: 'Choose Maven version for build', name: 'Maven_version',),
+            choice(choices: '1.7.0\n1.6.0\n1.8.0\n1.5.0\n1.4.2', description: 'Choose JDK version for build', name: 'JDK_version',),
+            choice(choices: 'dev\njboss7_migration\nmaster', description: 'Choose Branch for build', name: 'BranchGit',)
+         ])
+     ])
+
+    
+    withEnv(["JAVA_HOME=${ tool "JDK $JDK_version"}",
+             "PATH+MAVEN=${tool "Maven $Maven_version"}/bin:${env.JAVA_HOME}/bin"]) {
+        
+
+    
+
+        env.MAVEN_OPTS = "-Xmx1024m -XX:MaxPermSize=640m"
+        env.mailRecipients = "yarema.korda@globallogic.com"
+        env.JobName = "${env.JOB_NAME}"
+        env.BuildNumber = "${env.BUILD_NUMBER}"
+        env.BuildUrl = "${env.BUILD_URL}"
+        def BranchGitFwk = "master"
+        def GitCredentials = "c956a40d-d12d-4e57-b779-d3a8c011aec7"
+        def GitUser = "cicd-build"
+        def GitUrlFwk = "developer.sicap.com/gitlab/sicap/fwk_platformgeneric.git"
+        def GitUrlPrd = "developer.sicap.com/gitlab/sicap/prd_dmc4.git"
+        
+
+        try {
+            deleteDir()
+            stage('FWK') {
+                sh 'mvn -version'
+                sh 'echo "$JAVA_HOME"'
+                git (url: "https://${GitUser}@${GitUrlFwk}", 
+                    credentialsId: "${GitCredentials}", 
+                    branch: "${BranchGit}")
+                sh 'mvn clean install -f pom.xml -DskipTests=$TestStatus'
+            }
+ 
+            stage('DMC-CORE') {
+                    git( branch: "${BranchGit}",
+                        credentialsId: "${GitCredentials}",
+                        url: "https://${GitUser}@${GitUrlPrd}"
+                    )
+                    sh 'mkdir -p Core/services/impl-it/target/classes'
+                    sh 'mvn -fae -P !SolarisBuild,hsqldb-test,DERBY install -f Core/pom.xml -Dmaven.test.skip=$TestStatus'
+            }
+            
+            stage ('Build-GUI') {
+                    sh 'mvn clean install deploy -X -f GUI/pom.xml -Dmaven.test.skip=$TestStatus'
+            }
+
+            stage ('Build-PACKAGE') {
+                    sh 'mvn clean install -X -fae -P sicap-staging -f PackageDist/pom.xml -DskipTests=$TestStatus'
+            }
+
+            
+        currentBuild.result = 'SUCCESS'
+        }
+
+        catch (e) {
+            env.error = "${e}";
+            sh '''
+                    (
+                    echo -e "To: $mailRecipients\nSubject: FAILURE: Job $JobName [$BuildNumber]\nFrom: jenkins@sicap.com\n\nSTARTED: Job $JobName [$BuildNumber]:Check console output at $BuildUrl/console\n
+                    Error message:
+                    $error"
+                    ) | sendmail -t
+                    '''
+
+                throw e
+                env.currentBuild.result = "FAILURE"
+        } 
+        if (currentBuild.result != 'FAILURE') {
+
+                sh '''
+                    (
+                    echo -e "To: $mailRecipients\nSubject: SUCCESS: Job ${JobName} [$BuildNumber]\nFrom: jenkins@sicap.com\n\nSTARTED: Job $JobName [$BuildNumber]:Check console output at $BuildUrl/console"
+                    ) | sendmail -t
+                    '''
+                }
+    }
+}   
