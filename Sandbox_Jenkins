@@ -1,0 +1,28 @@
+version: '3'
+services:
+  jenkins:
+    image: jenkins/jenkins:lts
+    ports:
+      - "8080:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+  gerrit:
+    image: openfrontier/gerrit
+    volumes:
+      - git-volume:/var/gerrit/git
+      - db-volume:/var/gerrit/db
+      - index-volume:/var/gerrit/index
+      - cache-volume:/var/gerrit/cache
+    ports:
+      - "29418:29418"
+      - "80:8080"
+    environment:
+      - AUTH_TYPE=DEVELOPMENT_BECOME_ANY_ACCOUNT
+
+
+volumes:
+  jenkins_home:
+  git-volume:
+  db-volume:
+  index-volume:
+  cache-volume:
